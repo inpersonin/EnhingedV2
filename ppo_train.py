@@ -227,9 +227,10 @@ def ppo_step(
     # Ratio (importance weight).
     ratio = torch.exp(new_lp_sum - old_lp_sum)
 
-    # Normalize advantages.
+    # Normalize advantages (only if we have more than 1 element, else std is NaN).
     adv = advantages.detach()
-    adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+    if adv.numel() > 1:
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
 
     # PPO clipped objective.
     surr1 = ratio * adv
