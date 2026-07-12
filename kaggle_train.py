@@ -37,7 +37,7 @@ import os
 
 # ---- Edit these paths to match your Kaggle inputs ----
 CORPUS_TXT      = "/kaggle/input/enhinged/corpus.txt"
-BEST_PT         = "/kaggle/input/enhinged/best.pt"   # your uploaded best.pt
+BEST_PT         = "/kaggle/input/models/uehewbrv/enhinged/transformers/default/1/best.pt"
 DAILYDIALOG_DIR = "/kaggle/input/daily-dialog"        # Kaggle DailyDialog dataset
 CORNELL_LINES   = "/kaggle/input/cornell-movie-dialog/movie_lines.txt"
 CORNELL_CONVOS  = "/kaggle/input/cornell-movie-dialog/movie_conversations.txt"
@@ -137,7 +137,7 @@ for fname in sorted(os.listdir(DATA_OUT)):
 # warmup_iters=0: model is already warm, no ramp-up needed.
 # lr_decay_iters=16000: cosine decay reaches min_lr at iter 16000.
 
-CKPT_PATH = "/kaggle/input/models/uehewbrv/hingpt3/transformers/default/1/best(1).pt"
+CKPT_PATH = "/kaggle/input/models/uehewbrv/enhinged/transformers/default/1/best.pt"
 
 train_cmd = [
     "python", "train.py",
