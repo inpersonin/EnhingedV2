@@ -13,7 +13,7 @@ The judge is called OFFLINE in a one-time labeling pass only — never inside
 the PPO training loop.
 
 Usage:
-    # Set OPENAI_API_KEY or OPENAI_API_BASE in environment for custom endpoint.
+    # Set GEMINI_API_KEY in environment
     python label_preference_data.py \
         --ckpt_path checkpoints/best.pt \
         --hinglish_val hinglish_val.bin \
@@ -21,7 +21,7 @@ Usage:
         --out_dir pref_data/ \
         --n_prompts 300 \
         --n_completions 4 \
-        --judge_model gpt-4o-mini
+        --judge_model gemini-2.5-flash
 
     # Resume from an existing partial run:
     python label_preference_data.py ... --resume
@@ -205,19 +205,22 @@ def _call_judge(
     max_retries: int = 3,
 ) -> Optional[dict]:
     """Call the judge model and parse its ranking. Returns None on failure."""
-    messages = [
-        {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-        {"role": "user", "content": _judge_prompt(user_prompt, completion_a, completion_b)},
-    ]
+    from google.genai import types
+    
+    prompt = f"{JUDGE_SYSTEM_PROMPT}\n\n{_judge_prompt(user_prompt, completion_a, completion_b)}"
+    
     for attempt in range(max_retries):
         try:
-            resp = client.chat.completions.create(
+            resp = client.models.generate_content(
                 model=judge_model,
-                messages=messages,
-                temperature=0.0,
-                max_tokens=200,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    max_output_tokens=200,
+                    response_mime_type="application/json",
+                )
             )
-            raw = resp.choices[0].message.content.strip()
+            raw = resp.text.strip()
             # Parse JSON from the response.
             import re
             json_match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -245,8 +248,8 @@ def main() -> None:
                         help="Total prompts to label (split ~50/50 between languages).")
     parser.add_argument("--n_completions", type=int, default=4,
                         help="Completions per prompt (3-4 recommended).")
-    parser.add_argument("--judge_model", default="gpt-4o-mini",
-                        help="Judge model name. Must be OpenAI-compatible.")
+    parser.add_argument("--judge_model", default="gemini-2.5-flash",
+                        help="Judge model name. Must be a valid Gemini model.")
     parser.add_argument("--max_new_tokens", type=int, default=80)
     parser.add_argument("--resume", action="store_true",
                         help="Skip prompts already in the output file.")
@@ -315,10 +318,10 @@ def main() -> None:
 
     # Set up judge client.
     try:
-        from openai import OpenAI
-        client = OpenAI()
+        from google import genai
+        client = genai.Client()
     except ImportError:
-        raise ImportError("openai package required: pip install openai")
+        raise ImportError("google-genai package required: pip install google-genai")
 
     # Main labeling loop.
     n_labeled = 0
