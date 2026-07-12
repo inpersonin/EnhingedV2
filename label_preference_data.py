@@ -236,7 +236,14 @@ def _call_judge(
                 if "winner" in parsed and parsed["winner"] in ("A", "B"):
                     return {"winner": parsed["winner"], "reasoning": parsed.get("reasoning", "")}
         except Exception as exc:
+            err_msg = str(exc)
             sleep_time = min(2 ** (attempt + 1), 32)
+            
+            import re
+            match = re.search(r"'retry_after_seconds':\s*(\d+)", err_msg)
+            if match:
+                sleep_time = int(match.group(1)) + 1
+                
             print(f"    Judge API error (attempt {attempt + 1}, model: {current_model}): {exc}")
             print(f"    Sleeping for {sleep_time} seconds...")
             time.sleep(sleep_time)
