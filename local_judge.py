@@ -90,17 +90,23 @@ def _parse_verdict(text):
 @torch.no_grad()
 def _ask(prompt, a, b):
     messages = _build_messages(prompt, a, b)
-    input_ids = _tokenizer.apply_chat_template(
-        messages, add_generation_prompt=True, return_tensors="pt"
+    inputs = _tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        return_tensors="pt",
+        return_dict=True,  # force a dict of {input_ids, attention_mask}, not a bare tensor
     ).to(JUDGE_DEVICE)
 
     output = _model.generate(
-        input_ids,
+        **inputs,
         max_new_tokens=8,
         do_sample=False,
+        temperature=None,
+        top_p=None,
+        top_k=None,
         pad_token_id=_tokenizer.eos_token_id,
     )
-    gen_tokens = output[0][input_ids.shape[-1]:]
+    gen_tokens = output[0][inputs["input_ids"].shape[-1]:]
     text = _tokenizer.decode(gen_tokens, skip_special_tokens=True)
     return _parse_verdict(text)
 
