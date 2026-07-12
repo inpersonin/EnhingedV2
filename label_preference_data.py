@@ -48,25 +48,6 @@ import torch
 
 from config import DEFAULT_TOKENIZER_NAME, GPTConfig
 from model import HinglishGPT, generate, load_model_from_checkpoint
-{
-  "winner": "A" or "B",
-  "reasoning": "One or two sentences explaining why the winner is better."
-}
-Do not output anything else outside the JSON."""
-
-
-def _judge_prompt(user_prompt: str, completion_a: str, completion_b: str) -> str:
-    return f"""User prompt: {user_prompt!r}
-
-Response A:
-{completion_a}
-
-Response B:
-{completion_b}
-
-Which response is better? Reply with only the JSON as instructed."""
-
-
 # ---------------------------------------------------------------------------
 # Prompt extraction from validation binary files.
 # ---------------------------------------------------------------------------
