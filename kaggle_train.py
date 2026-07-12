@@ -36,7 +36,7 @@ print("Dependencies installed.")
 import os
 
 # ---- Edit these paths to match your Kaggle inputs ----
-CORPUS_TXT      = "/kaggle/input/enhinged/corpus.txt"
+CORPUS_TXT      = "/kaggle/input/datasets/uehewbrv/corpus/corpus.txt"
 BEST_PT         = "/kaggle/input/models/uehewbrv/enhinged/transformers/default/1/best.pt"
 DAILYDIALOG_DIR = "/kaggle/input/daily-dialog"        # Kaggle DailyDialog dataset
 CORNELL_LINES   = "/kaggle/input/cornell-movie-dialog/movie_lines.txt"
