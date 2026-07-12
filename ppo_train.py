@@ -224,8 +224,10 @@ def ppo_step(
     new_lp_sum = new_lp.sum(dim=-1)  # (batch,)
     old_lp_sum = old_lp.sum(dim=-1)  # (batch,)
 
-    # Ratio (importance weight).
-    ratio = torch.exp(new_lp_sum - old_lp_sum)
+    # Ratio (importance weight). Clamp log-ratio BEFORE exp() to prevent
+    # astronomically large values when sequence log-probs diverge.
+    log_ratio = torch.clamp(new_lp_sum - old_lp_sum, min=-5.0, max=5.0)
+    ratio = torch.exp(log_ratio)
 
     # Normalize advantages (only if we have more than 1 element, else std is NaN).
     adv = advantages.detach()
@@ -250,6 +252,19 @@ def ppo_step(
 
     optimiser.zero_grad()
     total_loss.backward()
+
+    # NaN guard: if any gradient is NaN/Inf, skip this update entirely.
+    # This prevents a single bad batch from corrupting model weights permanently.
+    has_nan_grad = False
+    for p in policy.parameters_for_opt():
+        if p.grad is not None and (torch.isnan(p.grad).any() or torch.isinf(p.grad).any()):
+            has_nan_grad = True
+            break
+    if has_nan_grad:
+        optimiser.zero_grad()
+        return {"policy_loss": float("nan"), "value_loss": float("nan"),
+                "entropy": float("nan"), "total_loss": float("nan"), "mean_ratio": float("nan")}
+
     nn.utils.clip_grad_norm_(policy.parameters_for_opt(), max_grad_norm)
     optimiser.step()
 
