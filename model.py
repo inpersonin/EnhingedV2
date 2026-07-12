@@ -69,6 +69,7 @@ class CausalSelfAttention(nn.Module):
         x: torch.Tensor,
         capture_attn: bool = False,
         layer_cache: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
         """
         Args:
@@ -77,6 +78,7 @@ class CausalSelfAttention(nn.Module):
             layer_cache:  None for training/full-sequence mode, or a
                           (past_k, past_v) tuple for cached generation.
                           Each tensor is (batch, n_head, past_len, head_dim).
+            use_cache:    whether to return the new cache (True during generation).
 
         Returns:
             output:     (batch, seq_len, n_embd)
@@ -99,6 +101,8 @@ class CausalSelfAttention(nn.Module):
             key = torch.cat([past_k, key], dim=2)    # (B, nh, past+T, hd)
             value = torch.cat([past_v, value], dim=2)
             new_cache: Optional[tuple[torch.Tensor, torch.Tensor]] = (key, value)
+        elif use_cache:
+            new_cache = (key, value)
         else:
             new_cache = None
 
@@ -165,8 +169,9 @@ class Block(nn.Module):
         x: torch.Tensor,
         capture_attn: bool = False,
         layer_cache: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: bool = False,
     ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor, torch.Tensor]]]:
-        attn_out, new_cache = self.attn(self.ln_1(x), capture_attn=capture_attn, layer_cache=layer_cache)
+        attn_out, new_cache = self.attn(self.ln_1(x), capture_attn=capture_attn, layer_cache=layer_cache, use_cache=use_cache)
         x = x + attn_out
         x = x + self.mlp(self.ln_2(x))
         return x, new_cache
@@ -254,7 +259,7 @@ class HinglishGPT(nn.Module):
 
         for i, block in enumerate(self.transformer["h"]):
             layer_cache = past_kv_cache[i] if (past_kv_cache is not None and targets is None) else None
-            x, updated_cache = block(x, capture_attn=capture_attn, layer_cache=layer_cache)
+            x, updated_cache = block(x, capture_attn=capture_attn, layer_cache=layer_cache, use_cache=use_cache)
             if new_kv_cache is not None:
                 new_kv_cache.append(updated_cache)  # type: ignore[arg-type]
 
