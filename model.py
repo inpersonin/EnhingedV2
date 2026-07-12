@@ -489,6 +489,13 @@ def load_model_from_checkpoint(
     model.to(resolved_device)
     model.eval()
 
+    # If the checkpoint was saved in fp16 (e.g. compressed for Render free tier),
+    # keep the model in fp16 to stay within 512 MB RAM. CPU supports fp16 inference.
+    sample_weight = next(iter(state.values()))
+    if isinstance(sample_weight, torch.Tensor) and sample_weight.dtype == torch.float16:
+        model = model.half()
+        print("inference: fp16 checkpoint detected — running in half precision (~274 MB).")
+
     # Apply int8 dynamic quantization if toggled (inference-only, never training).
     from config import USE_INT8_QUANTIZE
     if USE_INT8_QUANTIZE:
