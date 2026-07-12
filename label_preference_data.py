@@ -211,8 +211,9 @@ def _call_judge(
     
     fallback_models = [
         judge_model,
-        "deepseek/deepseek-r1-0528:free",
-        "mistralai/mistral-small-3.2-24b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-4-31b-it:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
     ]
     
     for attempt in range(max_retries):
@@ -256,7 +257,7 @@ def main() -> None:
                         help="Total prompts to label (split ~50/50 between languages).")
     parser.add_argument("--n_completions", type=int, default=4,
                         help="Completions per prompt (3-4 recommended).")
-    parser.add_argument("--judge_model", default="qwen/qwen3-32b:free",
+    parser.add_argument("--judge_model", default="meta-llama/llama-3.3-70b-instruct:free",
                         help="OpenRouter model name.")
     parser.add_argument("--max_new_tokens", type=int, default=80)
     parser.add_argument("--max_pairs_per_prompt", type=int, default=1,
