@@ -48,22 +48,6 @@ import torch
 
 from config import DEFAULT_TOKENIZER_NAME, GPTConfig
 from model import HinglishGPT, generate, load_model_from_checkpoint
-
-
-# ---------------------------------------------------------------------------
-# Rubric prompt for the judge.
-# ---------------------------------------------------------------------------
-JUDGE_SYSTEM_PROMPT = """You are an expert evaluator for a bilingual (Hinglish + English) conversational AI called Enhinged.
-Your job is to compare two AI-generated responses to a user prompt and determine which one is BETTER.
-
-When comparing, consider these criteria (in rough order of importance):
-1. RELEVANCE & COHERENCE: Does the response actually address the user's message in a sensible, on-topic way?
-2. LANGUAGE APPROPRIATENESS: If the prompt is in Hinglish, the response should feel natural in that register. Natural code-switching (mixing Hindi/English words) is fine and expected. Jarring, random language switching or inappropriate formality is NOT.
-3. CONVERSATIONAL NATURALNESS: Does it sound like something a real person would say in a casual chat? Avoid robotic or template-like replies.
-4. ABSENCE OF REPETITION/ARTIFACTS: No repeated phrases, no gibberish, no sentence fragments mid-thought.
-5. LENGTH: Not truncated mid-sentence. Not rambling unnecessarily. Concise is usually better.
-
-Your output must be ONLY a JSON object with these fields:
 {
   "winner": "A" or "B",
   "reasoning": "One or two sentences explaining why the winner is better."
@@ -193,61 +177,8 @@ def _generate_completions(
 
 
 # ---------------------------------------------------------------------------
-# Judge API call.
+# Note: Local judging is now handled by local_judge.py
 # ---------------------------------------------------------------------------
-
-def _call_judge(
-    client,
-    judge_model: str,
-    user_prompt: str,
-    completion_a: str,
-    completion_b: str,
-    max_retries: int = 5,
-) -> Optional[dict]:
-    """Call the judge model and parse its ranking. Returns None on failure."""
-    import time
-    
-    prompt_text = _judge_prompt(user_prompt, completion_a, completion_b)
-    
-    fallback_models = [
-        judge_model,
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-4-31b-it:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free",
-    ]
-    
-    for attempt in range(max_retries):
-        current_model = fallback_models[min(attempt, len(fallback_models) - 1)]
-        try:
-            resp = client.chat.completions.create(
-                model=current_model,
-                temperature=0.0,
-                messages=[
-                    {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt_text},
-                ],
-            )
-            raw = resp.choices[0].message.content.strip()
-            # Parse JSON from the response.
-            import re
-            json_match = re.search(r"\{.*\}", raw, re.DOTALL)
-            if json_match:
-                parsed = json.loads(json_match.group())
-                if "winner" in parsed and parsed["winner"] in ("A", "B"):
-                    return {"winner": parsed["winner"], "reasoning": parsed.get("reasoning", "")}
-        except Exception as exc:
-            err_msg = str(exc)
-            sleep_time = min(2 ** (attempt + 1), 32)
-            
-            import re
-            match = re.search(r"'retry_after_seconds':\s*(\d+)", err_msg)
-            if match:
-                sleep_time = int(match.group(1)) + 1
-                
-            print(f"    Judge API error (attempt {attempt + 1}, model: {current_model}): {exc}")
-            print(f"    Sleeping for {sleep_time} seconds...")
-            time.sleep(sleep_time)
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -264,8 +195,6 @@ def main() -> None:
                         help="Total prompts to label (split ~50/50 between languages).")
     parser.add_argument("--n_completions", type=int, default=4,
                         help="Completions per prompt (3-4 recommended).")
-    parser.add_argument("--judge_model", default="meta-llama/llama-3.3-70b-instruct:free",
-                        help="OpenRouter model name.")
     parser.add_argument("--max_new_tokens", type=int, default=80)
     parser.add_argument("--max_pairs_per_prompt", type=int, default=1,
                         help="Maximum pairwise comparisons per prompt to save API quota.")
@@ -334,18 +263,10 @@ def main() -> None:
     all_prompts = all_prompts[:args.n_prompts]
     print(f"Total prompts to process: {len(all_prompts)}")
 
-    # Set up judge client and model.
-    judge_model = args.judge_model
-    try:
-        from openai import OpenAI
-        client = OpenAI(
-            api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api/v1",
-        )
-        if not client.api_key:
-            raise KeyError("OPENROUTER_API_KEY environment variable is required")
-    except ImportError:
-        raise ImportError("openai package required: pip install openai")
+    # The local judge will be lazy-loaded in judge_pair, but we can load it here
+    # to fail fast if VRAM is insufficient.
+    from local_judge import load_judge, judge_pair
+    load_judge()
 
     # Main labeling loop.
     n_labeled = 0
@@ -376,27 +297,27 @@ def main() -> None:
             for i, j in pairs:
                 ca, cb = completions[i], completions[j]
                 print(f"  Judging pair ({i}, {j})...")
-                result = _call_judge(client, judge_model, prompt, ca, cb)
-                if result is None:
-                    print("  Judge call failed, skipping pair.")
+                verdict = judge_pair(prompt, ca, cb, swap_check=True)
+                if verdict is None:
+                    print("  Judge call failed or disagreed with itself, skipping pair.")
                     continue
 
-                winner_idx = i if result["winner"] == "A" else j
-                loser_idx = j if result["winner"] == "A" else i
+                winner_idx = i if verdict == "A" else j
+                loser_idx = j if verdict == "A" else i
 
                 pair_record = {
                     "prompt": prompt,
                     "winner": completions[winner_idx],
                     "loser": completions[loser_idx],
-                    "judge_model": judge_model,
-                    "reasoning": result["reasoning"],
+                    "judge_model": "local_Qwen2.5-7B-Instruct",
+                    "reasoning": "",
                 }
                 raw_record = {
                     "prompt": prompt,
                     "completion_a": ca,
                     "completion_b": cb,
-                    "winner": result["winner"],
-                    "reasoning": result["reasoning"],
+                    "winner": verdict,
+                    "reasoning": "",
                 }
 
                 out_f.write(json.dumps(pair_record, ensure_ascii=False) + "\n")
@@ -405,10 +326,7 @@ def main() -> None:
                 raw_f.flush()
 
                 n_labeled += 1
-                print(f"  Winner: completion {winner_idx} | {result['reasoning'][:80]}")
-
-            # Small delay to respect API rate limits.
-            time.sleep(0.5)
+                print(f"  Winner: completion {winner_idx} (Local Judge)")
 
     print(f"\nLabeling complete. {n_labeled} preference pairs written to {out_path}")
     print(f"Raw judge outputs written to {raw_path}")
