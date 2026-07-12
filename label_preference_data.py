@@ -202,10 +202,11 @@ def _call_judge(
     user_prompt: str,
     completion_a: str,
     completion_b: str,
-    max_retries: int = 3,
+    max_retries: int = 10,
 ) -> Optional[dict]:
     """Call the judge model and parse its ranking. Returns None on failure."""
     from google.genai import types
+    import time
     
     prompt = f"{JUDGE_SYSTEM_PROMPT}\n\n{_judge_prompt(user_prompt, completion_a, completion_b)}"
     
@@ -229,8 +230,16 @@ def _call_judge(
                 if "winner" in parsed and parsed["winner"] in ("A", "B"):
                     return {"winner": parsed["winner"], "reasoning": parsed.get("reasoning", "")}
         except Exception as exc:
-            print(f"    Judge API error (attempt {attempt + 1}): {exc}")
-            time.sleep(2 ** attempt)
+            err_msg = str(exc)
+            if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "Quota exceeded" in err_msg:
+                import re
+                match = re.search(r"Retry in (\d+) seconds", err_msg)
+                sleep_time = int(match.group(1)) + 2 if match else 65
+                print(f"    Rate limit hit. Sleeping for {sleep_time} seconds...")
+                time.sleep(sleep_time)
+            else:
+                print(f"    Judge API error (attempt {attempt + 1}): {exc}")
+                time.sleep(2 ** attempt)
     return None
 
 
@@ -248,9 +257,11 @@ def main() -> None:
                         help="Total prompts to label (split ~50/50 between languages).")
     parser.add_argument("--n_completions", type=int, default=4,
                         help="Completions per prompt (3-4 recommended).")
-    parser.add_argument("--judge_model", default="gemini-2.5-flash",
+    parser.add_argument("--judge_model", default="gemini-2.0-flash",
                         help="Judge model name. Must be a valid Gemini model.")
     parser.add_argument("--max_new_tokens", type=int, default=80)
+    parser.add_argument("--max_pairs_per_prompt", type=int, default=1,
+                        help="Maximum pairwise comparisons per prompt to save API quota.")
     parser.add_argument("--resume", action="store_true",
                         help="Skip prompts already in the output file.")
     parser.add_argument("--extra_prompts_file", default=None,
@@ -316,12 +327,30 @@ def main() -> None:
     all_prompts = all_prompts[:args.n_prompts]
     print(f"Total prompts to process: {len(all_prompts)}")
 
-    # Set up judge client.
+    # Set up judge client and model.
+    judge_model = args.judge_model
     try:
         from google import genai
         client = genai.Client()
+        
+        # Check if the requested model is valid
+        client.models.get(model=judge_model)
     except ImportError:
         raise ImportError("google-genai package required: pip install google-genai")
+    except Exception:
+        print(f"Model {judge_model} not found or unavailable. Querying available models...")
+        try:
+            available_models = [m.name for m in client.models.list() if "flash" in m.name.lower() and "gemini" in m.name.lower()]
+            if available_models:
+                preferred = [m for m in available_models if "2.0" in m] or [m for m in available_models if "1.5" in m] or available_models
+                judge_model = preferred[0]
+                print(f"Auto-selected supported model: {judge_model}")
+            else:
+                print("Warning: Could not automatically find a Flash model. Using gemini-1.5-flash as fallback.")
+                judge_model = "gemini-1.5-flash"
+        except Exception as e:
+            print(f"Warning: Model auto-discovery failed ({e}). Using gemini-1.5-flash.")
+            judge_model = "gemini-1.5-flash"
 
     # Main labeling loop.
     n_labeled = 0
@@ -345,11 +374,14 @@ def main() -> None:
             from itertools import combinations
             pairs = list(combinations(range(len(completions)), 2))
             random.shuffle(pairs)
+            
+            if args.max_pairs_per_prompt > 0:
+                pairs = pairs[:args.max_pairs_per_prompt]
 
             for i, j in pairs:
                 ca, cb = completions[i], completions[j]
                 print(f"  Judging pair ({i}, {j})...")
-                result = _call_judge(client, args.judge_model, prompt, ca, cb)
+                result = _call_judge(client, judge_model, prompt, ca, cb)
                 if result is None:
                     print("  Judge call failed, skipping pair.")
                     continue
@@ -361,7 +393,7 @@ def main() -> None:
                     "prompt": prompt,
                     "winner": completions[winner_idx],
                     "loser": completions[loser_idx],
-                    "judge_model": args.judge_model,
+                    "judge_model": judge_model,
                     "reasoning": result["reasoning"],
                 }
                 raw_record = {
