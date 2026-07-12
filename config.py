@@ -10,10 +10,10 @@ DEFAULT_TOKENIZER_NAME = "gpt2"
 # HF model repository where V2 weights live.
 # A new model repo keeps V2 weights separate from V1's inpersonin/HinGPT.
 HF_MODEL_REPO = "inpersonin/HinGPTv2"
-HF_MODEL_FILENAME = "best.pt"
+HF_MODEL_FILENAME = "rlhf_best.pt"
 
 # Local path where the downloaded checkpoint is cached inside the container.
-HF_MODEL_CACHE_PATH = "/tmp/best.pt"
+HF_MODEL_CACHE_PATH = "/tmp/rlhf_best.pt"
 
 DEFAULT_CHECKPOINT_PATH = "checkpoints/best.pt"
 if not os.path.exists(DEFAULT_CHECKPOINT_PATH) and os.path.exists("best.pt"):
