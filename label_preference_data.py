@@ -235,7 +235,7 @@ def _call_judge(
                 import re
                 match = re.search(r"Retry in (\d+) seconds", err_msg)
                 sleep_time = int(match.group(1)) + 2 if match else 65
-                print(f"    Rate limit hit. Sleeping for {sleep_time} seconds...")
+                print(f"    Rate limit hit (Error: {err_msg.strip()}).\n    Sleeping for {sleep_time} seconds...")
                 time.sleep(sleep_time)
             else:
                 print(f"    Judge API error (attempt {attempt + 1}): {exc}")
