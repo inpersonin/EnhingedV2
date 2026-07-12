@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.env
+
+# Large data/model files (never commit these)
+*.pt
+*.bin
+*.npy
+corpus.txt
+
+# Node
+node_modules/
+.next/
+out/
+
+# Build artifacts
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# HF cache
+.cache/
+
+# Temp
+tmp/
+pref_data/judge_raw.jsonl
