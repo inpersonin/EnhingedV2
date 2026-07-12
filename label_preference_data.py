@@ -13,7 +13,7 @@ The judge is called OFFLINE in a one-time labeling pass only — never inside
 the PPO training loop.
 
 Usage:
-    # Set GEMINI_API_KEY in environment
+    # Set OPENROUTER_API_KEY in environment
     python label_preference_data.py \
         --ckpt_path checkpoints/best.pt \
         --hinglish_val hinglish_val.bin \
@@ -21,7 +21,7 @@ Usage:
         --out_dir pref_data/ \
         --n_prompts 300 \
         --n_completions 4 \
-        --judge_model gemini-2.5-flash
+        --judge_model qwen/qwen3-32b:free
 
     # Resume from an existing partial run:
     python label_preference_data.py ... --resume
@@ -202,26 +202,31 @@ def _call_judge(
     user_prompt: str,
     completion_a: str,
     completion_b: str,
-    max_retries: int = 10,
+    max_retries: int = 5,
 ) -> Optional[dict]:
     """Call the judge model and parse its ranking. Returns None on failure."""
-    from google.genai import types
     import time
     
-    prompt = f"{JUDGE_SYSTEM_PROMPT}\n\n{_judge_prompt(user_prompt, completion_a, completion_b)}"
+    prompt_text = _judge_prompt(user_prompt, completion_a, completion_b)
+    
+    fallback_models = [
+        judge_model,
+        "deepseek/deepseek-r1-0528:free",
+        "mistralai/mistral-small-3.2-24b-instruct:free",
+    ]
     
     for attempt in range(max_retries):
+        current_model = fallback_models[min(attempt, len(fallback_models) - 1)]
         try:
-            resp = client.models.generate_content(
-                model=judge_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    max_output_tokens=200,
-                    response_mime_type="application/json",
-                )
+            resp = client.chat.completions.create(
+                model=current_model,
+                temperature=0.0,
+                messages=[
+                    {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt_text},
+                ],
             )
-            raw = resp.text.strip()
+            raw = resp.choices[0].message.content.strip()
             # Parse JSON from the response.
             import re
             json_match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -230,16 +235,10 @@ def _call_judge(
                 if "winner" in parsed and parsed["winner"] in ("A", "B"):
                     return {"winner": parsed["winner"], "reasoning": parsed.get("reasoning", "")}
         except Exception as exc:
-            err_msg = str(exc)
-            if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg or "Quota exceeded" in err_msg:
-                import re
-                match = re.search(r"Retry in (\d+) seconds", err_msg)
-                sleep_time = int(match.group(1)) + 2 if match else 65
-                print(f"    Rate limit hit (Error: {err_msg.strip()}).\n    Sleeping for {sleep_time} seconds...")
-                time.sleep(sleep_time)
-            else:
-                print(f"    Judge API error (attempt {attempt + 1}): {exc}")
-                time.sleep(2 ** attempt)
+            sleep_time = min(2 ** (attempt + 1), 32)
+            print(f"    Judge API error (attempt {attempt + 1}, model: {current_model}): {exc}")
+            print(f"    Sleeping for {sleep_time} seconds...")
+            time.sleep(sleep_time)
     return None
 
 
@@ -257,8 +256,8 @@ def main() -> None:
                         help="Total prompts to label (split ~50/50 between languages).")
     parser.add_argument("--n_completions", type=int, default=4,
                         help="Completions per prompt (3-4 recommended).")
-    parser.add_argument("--judge_model", default="gemini-2.0-flash",
-                        help="Judge model name. Must be a valid Gemini model.")
+    parser.add_argument("--judge_model", default="qwen/qwen3-32b:free",
+                        help="OpenRouter model name.")
     parser.add_argument("--max_new_tokens", type=int, default=80)
     parser.add_argument("--max_pairs_per_prompt", type=int, default=1,
                         help="Maximum pairwise comparisons per prompt to save API quota.")
@@ -330,27 +329,15 @@ def main() -> None:
     # Set up judge client and model.
     judge_model = args.judge_model
     try:
-        from google import genai
-        client = genai.Client()
-        
-        # Check if the requested model is valid
-        client.models.get(model=judge_model)
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=os.environ.get("OPENROUTER_API_KEY"),
+            base_url="https://openrouter.ai/api/v1",
+        )
+        if not client.api_key:
+            raise KeyError("OPENROUTER_API_KEY environment variable is required")
     except ImportError:
-        raise ImportError("google-genai package required: pip install google-genai")
-    except Exception:
-        print(f"Model {judge_model} not found or unavailable. Querying available models...")
-        try:
-            available_models = [m.name for m in client.models.list() if "flash" in m.name.lower() and "gemini" in m.name.lower()]
-            if available_models:
-                preferred = [m for m in available_models if "2.0" in m] or [m for m in available_models if "1.5" in m] or available_models
-                judge_model = preferred[0]
-                print(f"Auto-selected supported model: {judge_model}")
-            else:
-                print("Warning: Could not automatically find a Flash model. Using gemini-1.5-flash as fallback.")
-                judge_model = "gemini-1.5-flash"
-        except Exception as e:
-            print(f"Warning: Model auto-discovery failed ({e}). Using gemini-1.5-flash.")
-            judge_model = "gemini-1.5-flash"
+        raise ImportError("openai package required: pip install openai")
 
     # Main labeling loop.
     n_labeled = 0
