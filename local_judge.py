@@ -27,9 +27,9 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 # ---- config ------------------------------------------------------------
 
-# 7B is very doable on a T4 in 4-bit. If you want more headroom/speed,
-# swap this for "Qwen/Qwen2.5-3B-Instruct" -- same interface, no other changes.
-JUDGE_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+# 3B fits comfortably alongside the 124M policy model on a single T4 (~2.5GB in 4-bit).
+# If you have a GPU with >12GB free VRAM you can bump this back to Qwen2.5-7B-Instruct.
+JUDGE_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 JUDGE_DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 _tokenizer = None
