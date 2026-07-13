@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from config import DEFAULT_CHECKPOINT_PATH
-from inference import (
+from inference_onnx import (
     generate_response,
     get_loaded_checkpoint_path,
     is_model_loaded,
