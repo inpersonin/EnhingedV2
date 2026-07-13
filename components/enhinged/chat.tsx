@@ -1,7 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { ArrowUpRight, SendHorizontal, Sparkles, RefreshCcw, Settings, X, Check } from "lucide-react"
+import { ArrowUpRight, SendHorizontal, Sparkles, RefreshCcw } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -19,16 +19,7 @@ const suggestions = [
   "Ek funny line bolo",
 ]
 
-const DEFAULT_API = process.env.NEXT_PUBLIC_API_URL || ""
-const LS_KEY = "enhinged_api_url"
-
-function getApiBase(): string {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem(LS_KEY)
-    if (stored && stored.trim()) return stored.trim().replace(/\/$/, "")
-  }
-  return DEFAULT_API.replace(/\/$/, "")
-}
+const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://inpersonin-enhingedv2.hf.space"
 
 export function Chat() {
   const [messages, setMessages] = useState<Message[]>([
@@ -43,18 +34,6 @@ export function Chat() {
   const [status, setStatus] = useState("ready")
   const nextId = useRef(2)
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  // Settings panel state
-  const [showSettings, setShowSettings] = useState(false)
-  const [apiInput, setApiInput] = useState("")
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    // Pre-fill settings input with current stored URL
-    if (typeof window !== "undefined") {
-      setApiInput(localStorage.getItem(LS_KEY) || "")
-    }
-  }, [])
 
   useEffect(() => {
     // Scroll to bottom on new messages
@@ -73,22 +52,6 @@ export function Chat() {
     [messages],
   )
 
-  const handleSaveUrl = () => {
-    if (typeof window !== "undefined") {
-      const trimmed = apiInput.trim().replace(/\/$/, "")
-      if (trimmed) {
-        localStorage.setItem(LS_KEY, trimmed)
-      } else {
-        localStorage.removeItem(LS_KEY)
-      }
-    }
-    setSaved(true)
-    setTimeout(() => {
-      setSaved(false)
-      setShowSettings(false)
-    }, 1200)
-  }
-
   const handleReset = () => {
     setMessages([{
       id: nextId.current++,
@@ -102,21 +65,6 @@ export function Chat() {
     const trimmed = rawText.trim()
     if (!trimmed || pending) return
 
-    const currentApiBase = getApiBase()
-    if (!currentApiBase) {
-      setMessages((current) => [
-        ...current,
-        {
-          id: nextId.current++,
-          role: "assistant",
-          content: "⚙️ Backend URL not set. Click the settings icon in the chat header and paste your Railway URL.",
-          streaming: false,
-        },
-      ])
-      setShowSettings(true)
-      return
-    }
-
     const userMessage: Message = { id: nextId.current++, role: "user", content: trimmed }
     const assistantId = nextId.current++
     setInput("")
@@ -129,7 +77,7 @@ export function Chat() {
     ])
 
     try {
-      const response = await fetch(`${currentApiBase}/generate`, {
+      const response = await fetch(`${apiBase}/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -165,7 +113,7 @@ export function Chat() {
           message.id === assistantId
             ? {
                 ...message,
-                content: "Backend unavailable. Make sure your Railway service is running and the URL in ⚙️ settings is correct.",
+                content: "Backend unavailable right now. Check the HF Space URL or CORS settings.",
                 streaming: false,
               }
             : message,
@@ -176,8 +124,6 @@ export function Chat() {
       setPending(false)
     }
   }
-
-  const currentApiBase = getApiBase()
 
   return (
     <section id="chat" className="relative min-h-screen py-24 px-4 md:px-8 lg:px-12 bg-background flex flex-col justify-center">
@@ -197,29 +143,20 @@ export function Chat() {
             Seamless <span className="italic text-muted-foreground">Interaction</span>
           </h2>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            The frontend is a static export deployed on GitHub Pages. The backend runs on Railway with a custom FastAPI wrapper around the PyTorch model.
+            The frontend is a static export deployed on GitHub Pages. The backend runs on Hugging Face Spaces with a custom FastAPI wrapper around the PyTorch model.
           </p>
           <p className="text-muted-foreground text-sm leading-relaxed">
             The chat context window holds 256 tokens, meaning it can remember the last few turns of conversation before rolling over. Try asking it something in Hinglish.
           </p>
           
-          {currentApiBase ? (
-            <a
-              href={currentApiBase}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 font-mono text-[10px] tracking-[0.3em] uppercase transition-colors hover:bg-muted mt-4"
-            >
-              View Backend <ArrowUpRight className="size-3.5" />
-            </a>
-          ) : (
-            <button
-              onClick={() => setShowSettings(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-4 py-2 font-mono text-[10px] tracking-[0.3em] uppercase transition-colors hover:bg-primary/20 mt-4 text-primary"
-            >
-              <Settings className="size-3.5" /> Set Backend URL
-            </button>
-          )}
+          <a
+            href={apiBase}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 font-mono text-[10px] tracking-[0.3em] uppercase transition-colors hover:bg-muted mt-4"
+          >
+            View Backend <ArrowUpRight className="size-3.5" />
+          </a>
         </motion.div>
 
         {/* Right Side: Chat UI */}
@@ -230,46 +167,6 @@ export function Chat() {
           transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           className="glass-shell relative overflow-hidden rounded-[2rem] border border-border bg-card/40 shadow-2xl"
         >
-          {/* Settings Panel Overlay */}
-          <AnimatePresence>
-            {showSettings && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-card/95 backdrop-blur-sm p-6"
-              >
-                <p className="font-mono text-[10px] tracking-[0.3em] text-muted-foreground uppercase">Backend URL</p>
-                <p className="text-xs text-muted-foreground text-center max-w-xs">
-                  Paste your Railway service URL (e.g. <code className="text-primary">https://enhingedv2-production.up.railway.app</code>)
-                </p>
-                <input
-                  autoFocus
-                  value={apiInput}
-                  onChange={(e) => setApiInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveUrl() }}
-                  placeholder="https://your-service.up.railway.app"
-                  className="w-full rounded-xl border border-border bg-background/80 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-                <div className="flex gap-3 w-full">
-                  <button
-                    onClick={() => setShowSettings(false)}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-xs text-muted-foreground hover:bg-muted transition-colors"
-                  >
-                    <X className="size-3.5" /> Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveUrl}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    {saved ? <Check className="size-3.5" /> : <Check className="size-3.5" />}
-                    {saved ? "Saved!" : "Save & Connect"}
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Header */}
           <div className="border-b border-border/50 px-5 py-4 backdrop-blur-md">
             <div className="flex items-center justify-between gap-4">
@@ -290,13 +187,6 @@ export function Chat() {
                 `}>
                   {status}
                 </span>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground"
-                  title="Configure Backend URL"
-                >
-                  <Settings className="size-4" />
-                </button>
                 <button 
                   onClick={handleReset}
                   className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground"

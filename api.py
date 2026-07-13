@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import threading
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -64,17 +63,11 @@ def _ensure_model_loaded() -> None:
 
 @app.on_event("startup")
 def startup() -> None:
-    """Start model loading in a background thread so uvicorn can serve
-    requests (including /health) immediately — Railway health check passes
-    while the 335 MB model downloads in the background."""
-    def _bg_load() -> None:
-        global STARTUP_ERROR
-        try:
-            _ensure_model_loaded()
-        except Exception as exc:
-            STARTUP_ERROR = str(exc)
-
-    threading.Thread(target=_bg_load, daemon=True).start()
+    global STARTUP_ERROR
+    try:
+        _ensure_model_loaded()
+    except Exception as exc:
+        STARTUP_ERROR = str(exc)
 
 
 @app.on_event("shutdown")
@@ -138,4 +131,4 @@ def unload() -> dict:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("api:app", host="0.0.0.0", port=7860, reload=False)

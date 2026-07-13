@@ -10,15 +10,12 @@ DEFAULT_TOKENIZER_NAME = "gpt2"
 # HF model repository where V2 weights live.
 # A new model repo keeps V2 weights separate from V1's inpersonin/HinGPT.
 HF_MODEL_REPO = "inpersonin/HinGPTv2"
-HF_MODEL_FILENAME = "rlhf_best_fp16.pt"
+HF_MODEL_FILENAME = "rlhf_best.pt"
 
 # Local path where the downloaded checkpoint is cached
-HF_MODEL_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints", "rlhf_best_fp16.pt")
+HF_MODEL_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints", "rlhf_best.pt")
 
-# fp16 model is baked into the image via Git LFS (primary path)
-DEFAULT_CHECKPOINT_PATH = "checkpoints/rlhf_best_fp16.pt"
-if not os.path.exists(DEFAULT_CHECKPOINT_PATH):
-    DEFAULT_CHECKPOINT_PATH = "checkpoints/rlhf_best.pt"  # fp32 fallback
+DEFAULT_CHECKPOINT_PATH = "checkpoints/best.pt"
 if not os.path.exists(DEFAULT_CHECKPOINT_PATH) and os.path.exists("best.pt"):
     DEFAULT_CHECKPOINT_PATH = "best.pt"
 DEFAULT_DATA_DIR = "data"
