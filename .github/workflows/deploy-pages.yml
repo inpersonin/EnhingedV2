@@ -39,8 +39,8 @@ jobs:
         env:
           # Points to the V2 GitHub Pages path (EnhingedV2 repo).
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-          # Points to the V2 HF Space backend.
-          NEXT_PUBLIC_API_URL: https://inpersonin-enhingedv2.hf.space
+          # Points to the V2 Render backend. (Replace this with your actual Render.com URL)
+          NEXT_PUBLIC_API_URL: https://your-service-name.onrender.com
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
