@@ -501,11 +501,14 @@ def load_model_from_checkpoint(
     sample_weight = next(iter(state.values()))
     use_fp16 = isinstance(sample_weight, torch.Tensor) and sample_weight.dtype == torch.float16
 
-    model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
     if use_fp16:
-        model = model.half()
+        orig_dtype = torch.get_default_dtype()
+        torch.set_default_dtype(torch.float16)
+        model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
+        torch.set_default_dtype(orig_dtype)
         print("inference: fp16 checkpoint detected — model running in half precision (~335 MB).")
     else:
+        model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
         print("inference: fp32 checkpoint detected — model running in full precision (~522 MB).")
 
     # assign=True: directly swaps parameter tensors with the loaded ones —
