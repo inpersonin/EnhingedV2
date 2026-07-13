@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from config import DEFAULT_CHECKPOINT_PATH
+from config import ONNX_MODEL_PATH
 from inference_onnx import (
     generate_response,
     get_loaded_checkpoint_path,
@@ -19,7 +19,7 @@ from inference_onnx import (
 )
 
 app = FastAPI(title="Enhinged V2 API", version="2.0.0")
-DEFAULT_API_CHECKPOINT = os.getenv("ENHINGED_CKPT_PATH", DEFAULT_CHECKPOINT_PATH)
+DEFAULT_API_CHECKPOINT = os.getenv("ENHINGED_CKPT_PATH", ONNX_MODEL_PATH)
 CORS_ORIGINS = [origin.strip() for origin in os.getenv("ENHINGED_CORS_ORIGINS", "*").split(",") if origin.strip()]
 STARTUP_ERROR: Optional[str] = None
 

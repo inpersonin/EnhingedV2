@@ -50,16 +50,20 @@ def _resolve_onnx_path() -> str:
         print(f"inference_onnx: using local ONNX model at {ONNX_MODEL_PATH}")
         return ONNX_MODEL_PATH
 
-    print(f"inference_onnx: local ONNX file missing or is an LFS pointer. Downloading from {HF_MODEL_REPO} …")
+    print("inference_onnx: local ONNX file missing or is an LFS pointer. Downloading from GitHub LFS …")
     try:
-        from huggingface_hub import hf_hub_download
-        downloaded = hf_hub_download(
-            repo_id=HF_MODEL_REPO,
-            filename="model.onnx",
-            repo_type="model",
-            local_dir=os.path.dirname(HF_MODEL_CACHE_PATH) or "/tmp",
-            local_dir_use_symlinks=False,
-        )
+        import urllib.request
+        url = "https://github.com/inpersonin/EnhingedV2/raw/main/model.onnx"
+        downloaded = ONNX_MODEL_PATH
+        
+        print(f"Downloading {url} to {downloaded}...")
+        urllib.request.urlretrieve(url, downloaded)
+        
+        # Verify size to ensure it's not another LFS pointer (GitHub returns the real file for public repos)
+        if os.path.getsize(downloaded) < 1024 * 1024:
+            raise RuntimeError("Downloaded file is too small, expected > 1MB.")
+            
+        print("inference_onnx: download complete!")
         return downloaded
     except Exception as exc:
         raise FileNotFoundError(
@@ -70,7 +74,7 @@ def _resolve_onnx_path() -> str:
 
 def load_model(path: Optional[str] = None) -> None:
     """Load the ONNX model into the shared inference runtime."""
-    onnx_path = path or _resolve_onnx_path()
+    onnx_path = _resolve_onnx_path()
 
     so = ort.SessionOptions()
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
