@@ -44,40 +44,27 @@ _STATE = _RuntimeState()
 
 
 def _resolve_onnx_path() -> str:
-    """Return a usable local path to the ONNX model.
-
-    Priority:
-      1. Local repo copy (committed via Git LFS) – no download needed.
-      2. /tmp cache from a previous download.
-      3. Download from HuggingFace Hub.
-    """
-    if os.path.exists(ONNX_MODEL_PATH):
+    """Return a usable local path to the ONNX model."""
+    # Check local ONNX model (and ensure it's not a 130-byte Git LFS pointer)
+    if os.path.exists(ONNX_MODEL_PATH) and os.path.getsize(ONNX_MODEL_PATH) > 1024 * 1024:
         print(f"inference_onnx: using local ONNX model at {ONNX_MODEL_PATH}")
         return ONNX_MODEL_PATH
 
-    if os.path.exists(HF_MODEL_CACHE_PATH):
-        print(f"inference_onnx: using cached model at {HF_MODEL_CACHE_PATH}")
-        return HF_MODEL_CACHE_PATH
-
-    print(f"inference_onnx: downloading {HF_MODEL_FILENAME} from {HF_MODEL_REPO} …")
+    print(f"inference_onnx: local ONNX file missing or is an LFS pointer. Downloading from {HF_MODEL_REPO} …")
     try:
         from huggingface_hub import hf_hub_download
         downloaded = hf_hub_download(
             repo_id=HF_MODEL_REPO,
-            filename=HF_MODEL_FILENAME,
+            filename="model.onnx",
             repo_type="model",
             local_dir=os.path.dirname(HF_MODEL_CACHE_PATH) or "/tmp",
             local_dir_use_symlinks=False,
         )
-        import shutil
-        if not os.path.exists(HF_MODEL_CACHE_PATH):
-            shutil.copy2(downloaded, HF_MODEL_CACHE_PATH)
-        print(f"inference_onnx: download complete -> {HF_MODEL_CACHE_PATH}")
-        return HF_MODEL_CACHE_PATH
+        return downloaded
     except Exception as exc:
         raise FileNotFoundError(
             f"ONNX model not found locally and download failed: {exc}\n"
-            f"Run: python export_onnx.py --ckpt <ckpt> --out {ONNX_MODEL_PATH}"
+            f"Please ensure you uploaded 'model.onnx' to {HF_MODEL_REPO} on HuggingFace!"
         ) from exc
 
 

@@ -12,7 +12,7 @@ import os
 from huggingface_hub import HfApi
 
 
-def upload(ckpt_path: str) -> None:
+def upload(ckpt_path: str, filename: str) -> None:
     if not os.path.exists(ckpt_path):
         print(f"Error: Checkpoint not found at {ckpt_path}")
         return
@@ -31,12 +31,12 @@ def upload(ckpt_path: str) -> None:
     try:
         api.upload_file(
             path_or_fileobj=ckpt_path,
-            path_in_repo="best.pt",
+            path_in_repo=filename,
             repo_id=repo_id,
             repo_type="model",
         )
-        print(f"\nSuccess! {ckpt_path} uploaded as best.pt to {repo_id}")
-        print("The Enhinged V2 HF Space will pick this up automatically on next boot.")
+        print(f"\nSuccess! {ckpt_path} uploaded as {filename} to {repo_id}")
+        print("The Enhinged V2 backend will pick this up automatically.")
     except Exception as e:
         print(f"\nUpload failed: {e}")
 
@@ -44,8 +44,9 @@ def upload(ckpt_path: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Upload V2 checkpoint to HuggingFace.")
     parser.add_argument("--ckpt_path", default="checkpoints/rlhf_best.pt")
+    parser.add_argument("--filename", default="rlhf_best.pt")
     args = parser.parse_args()
-    upload(args.ckpt_path)
+    upload(args.ckpt_path, args.filename)
 
 
 if __name__ == "__main__":

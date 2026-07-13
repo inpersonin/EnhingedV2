@@ -14,6 +14,7 @@ HF_MODEL_FILENAME = "rlhf_best.pt"
 
 # Local path where the downloaded checkpoint is cached
 HF_MODEL_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints", "rlhf_best.pt")
+ONNX_MODEL_PATH = "model.onnx"
 
 DEFAULT_CHECKPOINT_PATH = "checkpoints/best.pt"
 if not os.path.exists(DEFAULT_CHECKPOINT_PATH) and os.path.exists("best.pt"):
