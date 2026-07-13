@@ -480,35 +480,27 @@ def load_model_from_checkpoint(
 
     resolved_device = _resolve_device(device)
 
-    # mmap=True: tensors are memory-mapped from disk rather than copied into RAM.
-    # Falls back to a plain load on older PyTorch builds (< 2.1).
+    # Load checkpoint into RAM (335 MB). No mmap=True to avoid Docker cgroup page cache OOM kills.
     try:
-        checkpoint = torch.load(
-            ckpt_path, map_location="cpu", weights_only=False, mmap=True
-        )
+        checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     except TypeError:
-        try:
-            checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        except TypeError:
-            checkpoint = torch.load(ckpt_path, map_location="cpu")
+        checkpoint = torch.load(ckpt_path, map_location="cpu")
 
     state = checkpoint["model_state"]
     # Strip any value-head keys left in RLHF checkpoints.
     state = {k: v for k, v in state.items() if not k.startswith("value_head.")}
 
-    # Detect fp16 checkpoint BEFORE creating the model so we pre-allocate
-    # in the right dtype — avoids holding fp32 model + fp16 weights at once.
     sample_weight = next(iter(state.values()))
     use_fp16 = isinstance(sample_weight, torch.Tensor) and sample_weight.dtype == torch.float16
 
-    if use_fp16:
-        orig_dtype = torch.get_default_dtype()
-        torch.set_default_dtype(torch.float16)
+    # Initialize model with 0 bytes RAM usage using 'meta' device.
+    # This completely eliminates the memory spike during instantiation.
+    with torch.device("meta"):
         model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
-        torch.set_default_dtype(orig_dtype)
+        
+    if use_fp16:
         print("inference: fp16 checkpoint detected — model running in half precision (~335 MB).")
     else:
-        model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
         print("inference: fp32 checkpoint detected — model running in full precision (~522 MB).")
 
     # assign=True: directly swaps parameter tensors with the loaded ones —
