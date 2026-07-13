@@ -8,6 +8,7 @@ print(f"Quantizing {model_input} to {model_output}...")
 quantize_dynamic(
     model_input,
     model_output,
-    weight_type=QuantType.QUInt8
+    weight_type=QuantType.QInt8,
+    op_types_to_quantize=["MatMul", "Gemm"]
 )
 print("Done!")
