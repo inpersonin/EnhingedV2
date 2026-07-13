@@ -39,8 +39,8 @@ jobs:
         env:
           # Points to the V2 GitHub Pages path (EnhingedV2 repo).
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-          # Points to the V2 HF Space backend — NOT the V1 space.
-          NEXT_PUBLIC_API_URL: https://inpersonin-enhingedv2.hf.space
+          # Points to the V2 Railway backend.
+          NEXT_PUBLIC_API_URL: https://enhingedv2-production.up.railway.app
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
