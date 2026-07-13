@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -63,11 +64,17 @@ def _ensure_model_loaded() -> None:
 
 @app.on_event("startup")
 def startup() -> None:
-    global STARTUP_ERROR
-    try:
-        _ensure_model_loaded()
-    except Exception as exc:
-        STARTUP_ERROR = str(exc)
+    """Start model loading in a background thread so uvicorn can serve
+    requests (including /health) immediately — Railway health check passes
+    while the 335 MB model downloads in the background."""
+    def _bg_load() -> None:
+        global STARTUP_ERROR
+        try:
+            _ensure_model_loaded()
+        except Exception as exc:
+            STARTUP_ERROR = str(exc)
+
+    threading.Thread(target=_bg_load, daemon=True).start()
 
 
 @app.on_event("shutdown")
