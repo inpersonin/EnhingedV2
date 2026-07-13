@@ -53,7 +53,7 @@ def _resolve_onnx_path() -> str:
     print("inference_onnx: local ONNX file missing or is an LFS pointer. Downloading from GitHub LFS …")
     try:
         import urllib.request
-        url = "https://github.com/inpersonin/EnhingedV2/raw/main/model.onnx"
+        url = "https://github.com/inpersonin/EnhingedV2/raw/main/model_quant.onnx"
         downloaded = ONNX_MODEL_PATH
         
         print(f"Downloading {url} to {downloaded}...")
