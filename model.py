@@ -464,52 +464,36 @@ def load_model_from_checkpoint(
     ckpt_path: str,
     device: Optional[torch.device] = None,
 ) -> tuple[HinglishGPT, tiktoken.Encoding, torch.device]:
-    """Load a trained Enhinged V2 checkpoint with minimal peak RAM usage.
+    """Load a trained Enhinged V2 checkpoint.
 
-    Uses mmap=True + assign=True so the file is memory-mapped rather than
-    copied into RAM, keeping peak usage at ~model_size rather than 2×model_size.
-    Compatible with fp16-compressed checkpoints (auto-detected).
+    Compatible with:
+    - Phase-1 fine-tuned checkpoints (plain model_state)
+    - Phase-4 RLHF checkpoints with value head already stripped
+    - fp16-compressed checkpoints (auto-detected, model kept in fp16)
     """
 
     resolved_device = _resolve_device(device)
-
-    # mmap=True: tensors are memory-mapped from disk — no full copy into RAM.
-    # Falls back gracefully on older PyTorch builds.
     try:
-        checkpoint = torch.load(
-            ckpt_path, map_location="cpu", weights_only=False, mmap=True
-        )
+        checkpoint = torch.load(ckpt_path, map_location=resolved_device, weights_only=False)
     except TypeError:
-        try:
-            checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        except TypeError:
-            checkpoint = torch.load(ckpt_path, map_location="cpu")
+        checkpoint = torch.load(ckpt_path, map_location=resolved_device)
 
     state = checkpoint["model_state"]
-    # Strip any accidental value-head keys from RLHF checkpoints.
+    # Strip any value-head keys that may have been accidentally left in —
+    # makes the loader robust to RLHF checkpoints that were not stripped.
     state = {k: v for k, v in state.items() if not k.startswith("value_head.")}
 
-    # Detect fp16 checkpoint BEFORE creating the model so we can pre-allocate
-    # in the right dtype — avoids holding fp32 model + fp16 checkpoint at once.
+    # Detect fp16 checkpoint and pre-create model in fp16 to avoid holding
+    # both fp32 model + fp16 weights in RAM simultaneously.
     sample_weight = next(iter(state.values()))
     use_fp16 = isinstance(sample_weight, torch.Tensor) and sample_weight.dtype == torch.float16
 
     model = HinglishGPT(GPTConfig(**checkpoint["model_config"]))
     if use_fp16:
         model = model.half()
-        print("inference: fp16 checkpoint — running in half precision (~274 MB RAM).")
+        print("inference: fp16 checkpoint detected — model running in half precision.")
 
-    # assign=True: directly replaces parameter tensors with loaded ones,
-    # no temporary copy → peak RAM stays at ~1× model size not 2×.
-    try:
-        model.load_state_dict(state, assign=True)
-    except TypeError:
-        # PyTorch < 2.0 doesn't support assign=; fall back silently.
-        model.load_state_dict(state)
-
-    # Free checkpoint memory immediately after loading.
-    del checkpoint, state
-
+    model.load_state_dict(state)
     model.to(resolved_device)
     model.eval()
 
@@ -522,7 +506,7 @@ def load_model_from_checkpoint(
             )
             print("inference: int8 dynamic quantization applied.")
         except Exception as exc:
-            print(f"inference: int8 quantization failed ({exc}), running in fp16/fp32.")
+            print(f"inference: int8 quantization failed ({exc}), running in full precision.")
 
     encoding = tiktoken.get_encoding(DEFAULT_TOKENIZER_NAME)
     return model, encoding, resolved_device
